@@ -1,3 +1,3 @@
-module github.com/chuanhhoang/aes-anywhere
+module github.com/chuanhhoang/aes-everywhere
 
 go 1.21.0
