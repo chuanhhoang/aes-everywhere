@@ -28,17 +28,18 @@
 package aes256
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/md5"
+	"crypto/rand"
 	b64 "encoding/base64"
-	"bytes"
+	"errors"
 	"io"
 )
 
 // Encrypts text with the passphrase
-func Encrypt(text string, passphrase string) (string) {
+func Encrypt(text string, passphrase string) string {
 	salt := make([]byte, 8)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
 		panic(err.Error())
@@ -60,10 +61,13 @@ func Encrypt(text string, passphrase string) (string) {
 }
 
 // Decrypts encrypted text with the passphrase
-func Decrypt(encrypted string, passphrase string) (string) {
-	ct, _ := b64.StdEncoding.DecodeString(encrypted)
+func Decrypt(encrypted string, passphrase string) (string, error) {
+	ct, err := b64.StdEncoding.DecodeString(encrypted)
+	if err != nil {
+		return "", err
+	}
 	if len(ct) < 16 || string(ct[:8]) != "Salted__" {
-		return ""
+		return "", errors.New("invalid salt")
 	}
 
 	salt := ct[8:16]
@@ -79,7 +83,11 @@ func Decrypt(encrypted string, passphrase string) (string) {
 	dst := make([]byte, len(ct))
 	cbc.CryptBlocks(dst, ct)
 
-	return string(__PKCS7Trimming(dst))
+	res, err := __PKCS7Trimming(dst)
+	if err != nil {
+		return "", err
+	}
+	return string(res), nil
 }
 
 func __PKCS7Padding(ciphertext []byte, blockSize int) []byte {
@@ -88,9 +96,15 @@ func __PKCS7Padding(ciphertext []byte, blockSize int) []byte {
 	return append(ciphertext, padtext...)
 }
 
-func __PKCS7Trimming(encrypt []byte) []byte {
+func __PKCS7Trimming(encrypt []byte) ([]byte, error) {
+	if len(encrypt) == 0 {
+		return nil, errors.New("encrypt too short")
+	}
 	padding := encrypt[len(encrypt)-1]
-	return encrypt[:len(encrypt)-int(padding)]
+	if int(padding) > len(encrypt) {
+		return nil, errors.New("padding is greater than encrypt")
+	}
+	return encrypt[:len(encrypt)-int(padding)], nil
 }
 
 func __DeriveKeyAndIv(passphrase string, salt string) (string, string) {
